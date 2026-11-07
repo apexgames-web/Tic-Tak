@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tic Tat</title>
+<style>
+:root{--bg:#f4f1ea;--card:#fff;--ink:#22223b;--mute:#7a7a8c;--line:#e3dfd3;--x:#e63946;--o:#1d7fd6;--acc:#6c4ff0;--win:#ffe9a8;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15151f;--card:#201f2e;--ink:#f0eefc;--mute:#9a98b0;--line:#33324a;--x:#ff6b78;--o:#5fb0ff;--acc:#8f7bff;--win:#4a3f12;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#15151f;--card:#201f2e;--ink:#f0eefc;--mute:#9a98b0;--line:#33324a;--x:#ff6b78;--o:#5fb0ff;--acc:#8f7bff;--win:#4a3f12;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.app{width:100%;max-width:420px;padding:16px;display:flex;flex-direction:column;gap:12px}
+h1{margin:4px 0 0;text-align:center;font-size:2rem;letter-spacing:1px}
+h1 span:nth-child(1){color:var(--x)}h1 span:nth-child(2){color:var(--o)}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+.seg button{flex:1;border:0;background:none;color:var(--mute);padding:9px 6px;border-radius:9px;font:600 .9rem inherit;font-family:inherit;cursor:pointer}
+.seg button.on{background:var(--acc);color:#fff}
+.row{display:flex;gap:8px;align-items:center}
+.row label{font-size:.75rem;color:var(--mute);width:62px}
+.row .seg{flex:1}
+.score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.score div{background:var(--card);border:1px solid var(--line);border-radius:12px;text-align:center;padding:8px 4px;font-size:.75rem;color:var(--mute)}
+.score b{display:block;font-size:1.5rem;color:var(--ink)}
+.score .a.turn{outline:2px solid var(--acc)}
+.score .a:nth-child(1) b{color:var(--x)}.score .a:nth-child(3) b{color:var(--o)}
+#status{text-align:center;font-weight:700;min-height:1.5em}
+.board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;aspect-ratio:1}
+.cell{background:var(--card);border:1px solid var(--line);border-radius:14px;font-size:clamp(2.5rem,16vw,4.2rem);font-weight:800;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);font-family:inherit;padding:0;transition:transform .12s,background .2s}
+.cell:active{transform:scale(.95)}
+.cell.X{color:var(--x)}.cell.O{color:var(--o)}
+.cell.pop span{animation:pop .25s ease-out}
+.cell.win{background:var(--win);animation:pulse .8s ease-in-out infinite alternate}
+@keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes pulse{to{transform:scale(1.05)}}
+.actions{display:flex;gap:8px}
+.actions button{flex:1;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:11px 4px;border-radius:12px;font:600 .85rem inherit;font-family:inherit;cursor:pointer}
+.actions .pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.actions button:disabled{opacity:.4}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1><span>Tic</span> <span>Tat</span></h1>
+  <div class="seg" id="mode"><button data-v="friend">👫 Friend</button><button data-v="bot" class="on">🤖 Robot</button></div>
+  <div id="botopts">
+    <div class="row"><label>Level</label><div class="seg" id="diff"><button data-v="easy">Easy</button><button data-v="med">Medium</button><button data-v="hard" class="on">Unbeatable</button></div></div>
+    <div class="row" style="margin-top:8px"><label>You play</label><div class="seg" id="side"><button data-v="X" class="on">X</button><button data-v="O">O</button></div></div>
+  </div>
+  <div class="score">
+    <div class="a" id="sx"><span id="nx">X</span><b id="vx">0</b></div>
+    <div id="sd">Draws<b id="vd">0</b></div>
+    <div class="a" id="so"><span id="no">O</span><b id="vo">0</b></div>
+  </div>
+  <div id="status"></div>
+  <div class="board" id="board"></div>
+  <div class="actions">
+    <button id="undo">↶ Undo</button>
+    <button id="again" class="pri">New round</button>
+    <button id="snd">🔊</button>
+    <button id="reset">Reset</button>
+  </div>
+</div>
+<script>
+const L=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+let S={mode:'bot',diff:'hard',me:'X',sound:true,scores:{X:0,O:0,D:0}};
+try{const s=JSON.parse(localStorage.getItem('tictat')||'null');if(s)S=Object.assign(S,s)}catch(e){}
+let b,turn,over,hist,starter='X',busy=false;
+const $=id=>document.getElementById(id);
+const save=()=>{try{localStorage.setItem('tictat',JSON.stringify(S))}catch(e){}};
+let ac;
+function beep(f,d=.09){if(!S.sound)return;try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=f;g.gain.value=.08;o.connect(g);g.connect(ac.destination);o.start();g.gain.exponentialRampToValueAtTime(.0001,ac.currentTime+d);o.stop(ac.currentTime+d)}catch(e){}}
+function winner(a){for(const l of L){const[x,y,z]=l;if(a[x]&&a[x]===a[y]&&a[x]===a[z])return{p:a[x],l}}return null}
+function minimax(a,t,bot){const w=winner(a);if(w)return w.p===bot?10:-10;if(a.every(Boolean))return 0;
+ let best=t===bot?-99:99;
+ for(let i=0;i<9;i++)if(!a[i]){a[i]=t;const v=minimax(a,t==='X'?'O':'X',bot)+(t===bot?-.01:.01);a[i]=null;best=t===bot?Math.max(best,v):Math.min(best,v)}
+ return best}
+function pick(sym){
+ const free=[...Array(9).keys()].filter(i=>!b[i]);const opp=sym==='X'?'O':'X';
+ const rnd=()=>free[Math.floor(Math.random()*free.length)];
+ if(S.diff==='easy')return Math.random()<.8?rnd():best();
+ if(S.diff==='med'){
+  for(const s of[sym,opp])for(const i of free){b[i]=s;const w=winner(b);b[i]=null;if(w)return i}
+  return Math.random()<.35?best():rnd()}
+ return best();
+ function best(){let m=-99,mv=[];for(const i of free){b[i]=sym;const v=minimax(b,opp,sym);b[i]=null;if(v>m){m=v;mv=[i]}else if(v===m)mv.push(i)}return mv[Math.floor(Math.random()*mv.length)]}
+}
+function build(){const el=$('board');el.innerHTML='';for(let i=0;i<9;i++){const c=document.createElement('button');c.className='cell';c.dataset.i=i;c.setAttribute('aria-label','Cell '+(i+1));c.onclick=()=>play(i);el.appendChild(c)}}
+function render(win){
+ document.querySelectorAll('.cell').forEach((c,i)=>{const v=b[i];const had=c.dataset.v||'';if(v&&!had){c.classList.add('pop')}if(!v)c.classList.remove('pop');c.dataset.v=v||'';c.className='cell'+(v?' '+v:'')+(c.classList.contains('pop')&&v?' pop':'')+(win&&win.l.includes(i)?' win':'');c.innerHTML=v?'<span>'+v+'</span>':''});
+ $('vx').textContent=S.scores.X;$('vo').textContent=S.scores.O;$('vd').textContent=S.scores.D;
+ $('sx').classList.toggle('turn',!over&&turn==='X');$('so').classList.toggle('turn',!over&&turn==='O');
+ const bot=S.mode==='bot';
+ $('nx').textContent=bot?(S.me==='X'?'You (X)':'Robot (X)'):'Player X';
+ $('no').textContent=bot?(S.me==='O'?'You (O)':'Robot (O)'):'Player O';
+ $('undo').disabled=busy||!hist.length||over;
+}
+function start(){b=Array(9).fill(null);turn=starter;over=false;hist=[];busy=false;build();msg();render();botTurn()}
+function msg(t){const bot=S.mode==='bot';$('status').textContent=t||(bot?(turn===S.me?'Your turn':'Robot is thinking…'):'Player '+turn+'’s turn')}
+function play(i){
+ if(over||b[i]||busy)return;
+ if(S.mode==='bot'&&turn!==S.me)return;
+ move(i)}
+function move(i){
+ b[i]=turn;hist.push(i);beep(turn==='X'?520:380);
+ const w=winner(b);
+ if(w){over=true;S.scores[w.p]++;save();const bot=S.mode==='bot';
+  msg(bot?(w.p===S.me?'🎉 You win!':'🤖 Robot wins!'):'🎉 Player '+w.p+' wins!');beep(760,.35);render(w);if(navigator.vibrate)try{navigator.vibrate(60)}catch(e){}return}
+ if(b.every(Boolean)){over=true;S.scores.D++;save();msg('🤝 It’s a draw');render();return}
+ turn=turn==='X'?'O':'X';msg();render();botTurn()}
+function botTurn(){
+ if(S.mode!=='bot'||over||turn===S.me)return;
+ busy=true;render();
+ setTimeout(()=>{busy=false;if(over||turn===S.me)return;move(pick(turn))},450)}
+$('undo').onclick=()=>{
+ if(over||busy||!hist.length)return;
+ const n=S.mode==='bot'?(turn===S.me?2:1):1;
+ for(let k=0;k<n&&hist.length;k++){b[hist.pop()]=null;turn=turn==='X'?'O':'X'}
+ if(S.mode==='bot'&&turn!==S.me&&!hist.length){/* robot opened; let it replay */}
+ msg();render();botTurn()};
+$('again').onclick=()=>{starter=starter==='X'?'O':'X';start()};
+$('reset').onclick=()=>{S.scores={X:0,O:0,D:0};save();starter='X';start()};
+$('snd').onclick=()=>{S.sound=!S.sound;$('snd').textContent=S.sound?'🔊':'🔇';save();beep(600)};
+function seg(id,key,cb){const el=$(id);const set=()=>el.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===String(S[key])));set();
+ el.onclick=e=>{const v=e.target.dataset&&e.target.dataset.v;if(!v)return;S[key]=v;save();set();cb()}}
+function applyMode(){$('botopts').style.display=S.mode==='bot'?'':'none'}
+seg('mode','mode',()=>{applyMode();starter='X';start()});
+seg('diff','diff',()=>{starter='X';start()});
+seg('side','me',()=>{starter='X';start()});
+$('snd').textContent=S.sound?'🔊':'🔇';
+applyMode();start();
+</script>
+</body>
+</html>
